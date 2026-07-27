@@ -61,6 +61,7 @@ jobs:
             _build
             deps
             native/oscore_nif/target
+            priv/native
           key: |
             oscore-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           restore-keys: |
@@ -93,10 +94,14 @@ jobs:
             _build
             deps
             native/oscore_nif/target
+            priv/native
           key: |
             oscore-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           restore-keys: |
             oscore-
+
+      - name: Install Elixir dependencies
+        run: mix do deps.get + compile --warnings-as-errors
 
       - name: Run tests
         run: mix test --cover
@@ -125,6 +130,7 @@ jobs:
             _build
             deps
             native/oscore_nif/target
+            priv/native
           key: |
             oscore-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           restore-keys: |
@@ -153,9 +159,9 @@ jobs:
         id: plt_cache
         with:
           key: |
-            oscore-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           restore-keys: |
-            oscore-
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           path: |
             priv/plts
 
@@ -169,7 +175,7 @@ jobs:
         id: plt_cache_save
         with:
           key: |
-            ${{ runner.os }}-elixir-1.19.1-otp-28-plt
+            ${{ runner.os }}-${{ hashFiles('.tool-versions') }}-${{ hashFiles('mix.lock') }}-2026-07-27
           path: |
             priv/plts
 
