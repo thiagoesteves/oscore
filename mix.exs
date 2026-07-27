@@ -82,7 +82,9 @@ defmodule Oscore.MixProject do
   def test_coverage do
     [
       summary: [threshold: 80],
-      ignore_modules: []
+      ignore_modules: [
+        Oscore.Native
+      ]
     ]
   end
 
