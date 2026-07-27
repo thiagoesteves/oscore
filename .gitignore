@@ -25,9 +25,6 @@ oscore-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 
-# Ignore .tool-versions file
-.tool-versions
-
 # Rust build artifacts and the NIF compiled by Rustler at build time.
 /native/oscore_nif/target/
 /priv/native/
