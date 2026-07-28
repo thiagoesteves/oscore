@@ -1,4 +1,4 @@
-# Changelog (v0.1.X)
+# Changelog (v0.2.X)
 
 ## 0.2.0
 
@@ -14,11 +14,5 @@
  * [[`PR-2`](https://github.com/thiagoesteves/oscore/pull/2)] Sequence-number persistence hook (RFC 8613 Appendix B.1): `OSCORE.sender_seq/1` reads the Sender Sequence Number counter and `derive_context`'s `:sender_seq` option restores it, so the counter can survive a restart and the same AEAD nonce is never reused under the same key.
  * [[`PR-2`](https://github.com/thiagoesteves/oscore/pull/2)] Added a `debug_assert` documenting the `<= 8`-byte invariant in `be_bytes_to_u64`.
 
-## v0.1.0 🚀 (2026-07-27)
-
-Initial release.
-
-- Security context derivation (RFC 8613 §3.2), AES-CCM-16-64-128 / HKDF-SHA-256.
-- Request/response message protection and verification (§5, §6, §8).
-- Sequence number and replay window handling (§7.4, Appendix B.1).
-- Correctness pinned to RFC 8613 Appendix C test vectors.
+# 🚀 Previous Releases
+ * [v0.1.0 (2026-07-27)](https://github.com/thiagoesteves/oscore/blob/v0.1.0/CHANGELOG.md)
