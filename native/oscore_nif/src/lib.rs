@@ -20,8 +20,10 @@ mod atoms {
         malformed_plaintext,
         decryption_failed,
         unknown_kid,
+        unknown_id_context,
         replayed,
         too_old,
+        id_too_long,
     }
 }
 
@@ -33,6 +35,7 @@ fn protocol_error_to_atom(err: protocol::ProtocolError) -> Atom {
         MalformedPlaintext => atoms::malformed_plaintext(),
         DecryptionFailed => atoms::decryption_failed(),
         UnknownKid => atoms::unknown_kid(),
+        UnknownIdContext => atoms::unknown_id_context(),
         Replayed => atoms::replayed(),
         TooOld => atoms::too_old(),
     }
@@ -57,15 +60,29 @@ fn derive_context<'a>(
     sender_id: Binary<'a>,
     recipient_id: Binary<'a>,
     id_context: Option<Binary<'a>>,
-) -> ResourceArc<ContextResource> {
-    let state = ContextState::new(
+    sender_seq: u64,
+) -> Result<ResourceArc<ContextResource>, Atom> {
+    if !context::ids_within_nonce_limit(sender_id.as_slice(), recipient_id.as_slice()) {
+        return Err(atoms::id_too_long());
+    }
+
+    let mut state = ContextState::new(
         master_secret.as_slice(),
         master_salt.as_slice(),
         sender_id.as_slice().to_vec(),
         recipient_id.as_slice().to_vec(),
         id_context.as_ref().map(Binary::as_slice),
     );
-    ResourceArc::new(ContextResource(Mutex::new(state)))
+    state.sender_seq = sender_seq;
+    Ok(ResourceArc::new(ContextResource(Mutex::new(state))))
+}
+
+/// Returns the next Sender Sequence Number this context will use. Callers can
+/// persist it and restore it via `derive_context`'s `sender_seq` argument to
+/// avoid AEAD nonce reuse across restarts (RFC 8613 Appendix B.1).
+#[rustler::nif]
+fn sender_seq(ctx: ResourceArc<ContextResource>) -> u64 {
+    ctx.0.lock().unwrap().sender_seq
 }
 
 #[allow(clippy::type_complexity)]

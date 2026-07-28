@@ -125,6 +125,108 @@ defmodule OSCORETest do
              )
   end
 
+  test "id_context round trips: protect_request emits the kid context and the server accepts it" do
+    id_context = hex("37cbf3210017a2d3")
+
+    {:ok, client} =
+      OSCORE.derive_context(
+        master_secret: @master_secret,
+        master_salt: @master_salt,
+        sender_id: <<>>,
+        recipient_id: hex("01"),
+        id_context: id_context,
+        # Appendix C.6 assumes a Sender Sequence Number of 20.
+        sender_seq: 20
+      )
+
+    {:ok, server} =
+      OSCORE.derive_context(
+        master_secret: @master_secret,
+        master_salt: @master_salt,
+        sender_id: hex("01"),
+        recipient_id: <<>>,
+        id_context: id_context
+      )
+
+    {:ok, protected, _echo} =
+      OSCORE.protect_request(client, code: 0x01, inner_options: hex("b3747631"))
+
+    # RFC 8613 Appendix C.6: the option carries the 'h' flag and the kid context.
+    assert protected.oscore_option == hex("19140837cbf3210017a2d3")
+
+    assert {:ok, 0x01, _opts, <<>>, _echo} =
+             OSCORE.unprotect_request(server,
+               oscore_option: protected.oscore_option,
+               ciphertext: protected.ciphertext
+             )
+  end
+
+  test "unprotect_request rejects a request whose kid context does not match the context" do
+    {:ok, client} =
+      OSCORE.derive_context(
+        master_secret: @master_secret,
+        master_salt: @master_salt,
+        sender_id: <<>>,
+        recipient_id: hex("01"),
+        id_context: hex("37cbf3210017a2d3")
+      )
+
+    # Server derived under a different ID Context.
+    {:ok, server} =
+      OSCORE.derive_context(
+        master_secret: @master_secret,
+        master_salt: @master_salt,
+        sender_id: hex("01"),
+        recipient_id: <<>>,
+        id_context: hex("aaaaaaaaaaaaaaaa")
+      )
+
+    {:ok, protected, _echo} =
+      OSCORE.protect_request(client, code: 0x01, inner_options: hex("b3747631"))
+
+    assert {:error, :unknown_id_context} =
+             OSCORE.unprotect_request(server,
+               oscore_option: protected.oscore_option,
+               ciphertext: protected.ciphertext
+             )
+  end
+
+  test "derive_context rejects an ID longer than the nonce allows" do
+    assert {:error, :id_too_long} =
+             OSCORE.derive_context(
+               master_secret: @master_secret,
+               master_salt: @master_salt,
+               sender_id: hex("0011223344556677"),
+               recipient_id: hex("01")
+             )
+  end
+
+  test "sender_seq exposes the counter and can be restored to avoid nonce reuse" do
+    {:ok, ctx} = client_context()
+    assert OSCORE.sender_seq(ctx) == 0
+
+    for _ <- 1..3 do
+      {:ok, _protected, _echo} = OSCORE.protect_request(ctx, code: 0x01)
+    end
+
+    assert OSCORE.sender_seq(ctx) == 3
+
+    # Simulate a restart: a fresh context restored to the persisted value keeps
+    # producing the same Partial IVs the peer expects, not restarting from 0.
+    {:ok, restored} =
+      OSCORE.derive_context(
+        master_secret: @master_secret,
+        master_salt: @master_salt,
+        sender_id: <<>>,
+        recipient_id: hex("01"),
+        sender_seq: 3
+      )
+
+    {:ok, _protected, echo} = OSCORE.protect_request(restored, code: 0x01)
+    assert echo.piv == hex("03")
+    assert OSCORE.sender_seq(restored) == 4
+  end
+
   test "unprotect_request rejects a kid that does not match the context's Recipient ID" do
     {:ok, other_client} =
       OSCORE.derive_context(
