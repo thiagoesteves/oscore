@@ -9,6 +9,11 @@ pub const AEAD_KEY_LEN: usize = 16;
 pub const AEAD_NONCE_LEN: usize = 13;
 pub const ALG_AEAD_AES_CCM_16_64_128: i64 = 10;
 
+/// RFC 8613 §3.3: the maximum Sender/Recipient ID length is the AEAD nonce
+/// length minus 6, i.e. 7 bytes for AES-CCM-16-64-128. A longer ID cannot fit
+/// in the nonce and is rejected at context-derivation time.
+pub const MAX_ID_LEN: usize = AEAD_NONCE_LEN - 6;
+
 pub struct DerivedContext {
     pub sender_key: [u8; AEAD_KEY_LEN],
     pub recipient_key: [u8; AEAD_KEY_LEN],
@@ -20,11 +25,19 @@ pub struct DerivedContext {
 pub struct ContextState {
     pub sender_id: Vec<u8>,
     pub recipient_id: Vec<u8>,
+    pub id_context: Option<Vec<u8>>,
     pub sender_key: [u8; AEAD_KEY_LEN],
     pub recipient_key: [u8; AEAD_KEY_LEN],
     pub common_iv: [u8; AEAD_NONCE_LEN],
     pub sender_seq: u64,
     pub replay: ReplayWindow,
+}
+
+/// Whether both IDs fit the AEAD nonce (RFC 8613 §3.3). Enforced at
+/// context-derivation time so a too-long ID fails cleanly instead of panicking
+/// later when the nonce is assembled.
+pub fn ids_within_nonce_limit(sender_id: &[u8], recipient_id: &[u8]) -> bool {
+    sender_id.len() <= MAX_ID_LEN && recipient_id.len() <= MAX_ID_LEN
 }
 
 impl ContextState {
@@ -45,6 +58,7 @@ impl ContextState {
         Self {
             sender_id,
             recipient_id,
+            id_context: id_context.map(|c| c.to_vec()),
             sender_key: derived.sender_key,
             recipient_key: derived.recipient_key,
             common_iv: derived.common_iv,
@@ -104,5 +118,21 @@ pub fn derive(
         sender_key: sender_key.try_into().expect("AEAD_KEY_LEN bytes"),
         recipient_key: recipient_key.try_into().expect("AEAD_KEY_LEN bytes"),
         common_iv: common_iv.try_into().expect("AEAD_NONCE_LEN bytes"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ids_within_nonce_limit_enforces_max_id_len() {
+        assert!(ids_within_nonce_limit(
+            &[0u8; MAX_ID_LEN],
+            &[0u8; MAX_ID_LEN]
+        ));
+        assert!(ids_within_nonce_limit(&[], &[]));
+        assert!(!ids_within_nonce_limit(&[0u8; MAX_ID_LEN + 1], &[]));
+        assert!(!ids_within_nonce_limit(&[], &[0u8; MAX_ID_LEN + 1]));
     }
 }

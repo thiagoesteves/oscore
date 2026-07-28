@@ -3,8 +3,17 @@ defmodule Oscore.Native do
 
   use Rustler, otp_app: :oscore, crate: "oscore_nif"
 
-  def derive_context(_master_secret, _master_salt, _sender_id, _recipient_id, _id_context),
-    do: error()
+  def derive_context(
+        _master_secret,
+        _master_salt,
+        _sender_id,
+        _recipient_id,
+        _id_context,
+        _sender_seq
+      ),
+      do: error()
+
+  def sender_seq(_ctx), do: error()
 
   def protect_request(_ctx, _code, _inner_options, _payload), do: error()
 

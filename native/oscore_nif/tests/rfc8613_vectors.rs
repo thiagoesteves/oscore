@@ -179,19 +179,12 @@ fn c6_oscore_request_with_id_context() {
     let mut ctx = client_context(&v);
     ctx.sender_seq = 20;
 
-    let (protected, echo) =
+    let (protected, _echo) =
         protocol::protect_request(&mut ctx, 0x01, &hex("b3747631"), &[]).unwrap();
 
-    let oscore_option_with_kid_context = option::encode(&option::OscoreOption {
-        partial_iv: echo.piv.clone(),
-        kid_context: Some(hex("37cbf3210017a2d3")),
-        kid: Some(echo.kid.clone()),
-    });
-
-    assert_eq!(
-        oscore_option_with_kid_context,
-        hex("19140837cbf3210017a2d3")
-    );
+    // protect_request must emit the kid context (the 'h' flag) directly when the
+    // context was derived with an ID Context.
+    assert_eq!(protected.oscore_option, hex("19140837cbf3210017a2d3"));
     assert_eq!(protected.ciphertext, hex("72cd7273fd331ac45cffbe55c3"));
 }
 

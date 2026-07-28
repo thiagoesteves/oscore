@@ -22,12 +22,17 @@ defmodule OSCORE do
           | :malformed_plaintext
           | :decryption_failed
           | :unknown_kid
+          | :unknown_id_context
           | :replayed
           | :too_old
+          | :id_too_long
 
   @doc """
   Derives a Security Context (RFC 8613 §3.2) from a Master Secret and the
   Sender/Recipient IDs.
+
+  Sender and Recipient IDs must be at most 7 bytes (the AEAD nonce length
+  minus 6, per RFC 8613 §3.3); a longer ID returns `{:error, :id_too_long}`.
 
   ## Options
 
@@ -36,26 +41,47 @@ defmodule OSCORE do
     * `:recipient_id` (required)
     * `:master_salt` - defaults to `<<>>` (the RFC 8613 default)
     * `:id_context` - defaults to `nil` (not present)
+    * `:sender_seq` - the initial Sender Sequence Number, defaults to `0`.
+      Restore a persisted value here to avoid AEAD nonce reuse across restarts
+      (RFC 8613 Appendix B.1); see `sender_seq/1`.
 
   """
-  @spec derive_context(keyword()) :: {:ok, Context.t()}
+  @spec derive_context(keyword()) :: {:ok, Context.t()} | {:error, error_reason()}
   def derive_context(opts) do
     master_secret = Keyword.fetch!(opts, :master_secret)
     master_salt = Keyword.get(opts, :master_salt, <<>>)
     sender_id = Keyword.fetch!(opts, :sender_id)
     recipient_id = Keyword.fetch!(opts, :recipient_id)
     id_context = Keyword.get(opts, :id_context)
+    sender_seq = Keyword.get(opts, :sender_seq, 0)
 
-    resource =
-      Oscore.Native.derive_context(
-        master_secret,
-        master_salt,
-        sender_id,
-        recipient_id,
-        id_context
-      )
+    case Oscore.Native.derive_context(
+           master_secret,
+           master_salt,
+           sender_id,
+           recipient_id,
+           id_context,
+           sender_seq
+         ) do
+      {:ok, resource} -> {:ok, %Context{resource: resource}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-    {:ok, %Context{resource: resource}}
+  @doc """
+  Returns the next Sender Sequence Number `ctx` will use to protect an outgoing
+  message.
+
+  Persist this value and restore it via `derive_context/1`'s `:sender_seq`
+  option after a restart so the same AEAD nonce is never reused under the same
+  key (RFC 8613 Appendix B.1). Persist it *before* the message that consumes it
+  is sent (and consider restoring to the persisted value plus a safety margin),
+  since a crash between using and persisting a sequence number would otherwise
+  reuse it.
+  """
+  @spec sender_seq(Context.t()) :: non_neg_integer()
+  def sender_seq(%Context{resource: resource}) do
+    Oscore.Native.sender_seq(resource)
   end
 
   @doc """

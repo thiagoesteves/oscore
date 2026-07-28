@@ -27,6 +27,7 @@ pub enum ProtocolError {
     MalformedPlaintext,
     DecryptionFailed,
     UnknownKid,
+    UnknownIdContext,
     Replayed,
     TooOld,
 }
@@ -125,6 +126,7 @@ fn split_plaintext(plaintext: &[u8]) -> Result<(u8, Vec<u8>, Vec<u8>), ProtocolE
 }
 
 fn be_bytes_to_u64(bytes: &[u8]) -> u64 {
+    debug_assert!(bytes.len() <= 8, "Partial IV must be at most 8 bytes");
     let mut buf = [0u8; 8];
     buf[8 - bytes.len()..].copy_from_slice(bytes);
     u64::from_be_bytes(buf)
@@ -148,7 +150,7 @@ pub fn protect_request(
 
     let oscore_option = option::encode(&OscoreOption {
         partial_iv: piv.clone(),
-        kid_context: None,
+        kid_context: ctx.id_context.clone(),
         kid: Some(ctx.sender_id.clone()),
     });
 
@@ -179,6 +181,12 @@ pub fn unprotect_request(
     let kid = opt.kid.unwrap_or_default();
     if kid != ctx.recipient_id {
         return Err(ProtocolError::UnknownKid);
+    }
+    // The 'kid context' carried in the option (RFC 8613 §6.1) must identify the
+    // same ID Context this Recipient Context was derived under. A mismatch means
+    // the request belongs to a different context.
+    if opt.kid_context.as_deref() != ctx.id_context.as_deref() {
+        return Err(ProtocolError::UnknownIdContext);
     }
 
     let seq = be_bytes_to_u64(&opt.partial_iv);
